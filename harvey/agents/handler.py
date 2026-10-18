@@ -380,6 +380,14 @@ class Handler:
             )
             return True  # nothing to read; the sender can't send through it either
 
+        if br.ATIVO and hasattr(self.provider, "_buscar_respostas"):  # fork LUME: só o que é de quem foi prospectado
+            try:
+                self.provider.remetentes_conhecidos = {
+                    p.email for s in ("queued", "contacted", "replied", "meeting")
+                    for p in await self.state.get_prospects_by_status(s) if p.email
+                }
+            except Exception as e:
+                logger.debug(f"Handler: lista de prospectados indisponível: {e}")
         try:
             inbound = await self.provider.get_replies()
         except Exception as e:

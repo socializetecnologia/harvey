@@ -101,3 +101,58 @@ def test_coletor_cria_o_contato_publicado(monkeypatch):
     assert criados[0].email == "contato@clinicasorriso.com.br" and criados[0].email_status == "verified"
     assert {"type": "instagram", "detail": "@clinicasorriso"} in sinais
     assert vistos == ["c1"]
+
+
+def test_leitura_da_caixa_nao_marca_nada_e_so_traz_as_respostas(monkeypatch):
+    """A caixa é a de verdade do dono: só leitura, só PEEK e só o que é resposta ao Harvey, devolução ou prospectado."""
+    from harvey.integrations import smtp_mail
+
+    cab = {
+        b"1": b"From: Banco <avisos@banco.com.br>\r\nSubject: fatura\r\n\r\n",
+        b"2": b"From: Ana <contato@sorriso.com.br>\r\nSubject: Re: mapa\r\nIn-Reply-To: <abc@wearelume.com.br>\r\n\r\n",
+        b"3": b"From: Mail Delivery Subsystem <mailer-daemon@googlemail.com>\r\nSubject: Delivery Status Notification (Failure)\r\n\r\n",
+        b"4": b"From: <dono@oficina.com.br>\r\nSubject: oi\r\n\r\n",
+    }
+    chamadas = []
+
+    class Conn:
+        def __init__(self, *a):
+            pass
+
+        def login(self, *a):
+            pass
+
+        def select(self, caixa, readonly=False):
+            chamadas.append(("select", readonly))
+            return "OK", [b"4"]
+
+        def search(self, *a):
+            chamadas.append(("search", a))
+            return "OK", [b"1 2 3 4"]
+
+        def fetch(self, ids, partes):
+            chamadas.append(("fetch", partes))
+            if "HEADER.FIELDS" in partes:
+                return "OK", [(k + b" (BODY[HEADER] {10}", v) for k, v in cab.items()]
+            return "OK", [(ids + b" (BODY[] {10}", cab[ids] + b"corpo")]
+
+        def logout(self):
+            pass
+
+    monkeypatch.setattr(smtp_mail.imaplib, "IMAP4_SSL", Conn)
+    p = smtp_mail.SmtpImapProvider.__new__(smtp_mail.SmtpImapProvider)
+    p.imap_host, p.imap_port, p.imap_user, p.imap_pass, p.smtp_user = "h", 993, "u", "s", "contato@wearelume.com.br"
+
+    class P:
+        email = "contato@wearelume.com.br"
+
+    class C:
+        persona = P()
+
+    p.config = C()
+    p.remetentes_conhecidos = {"dono@oficina.com.br"}
+    msgs = p._buscar_respostas(50)
+    assert sorted(m.from_email for m in msgs) == ["contato@sorriso.com.br", "dono@oficina.com.br", "mailer-daemon@googlemail.com"]
+    assert ("select", True) in chamadas
+    assert all("RFC822" not in c[1] for c in chamadas if c[0] == "fetch")  # nada de busca que marca como lido
+    assert all("PEEK" in c[1] for c in chamadas if c[0] == "fetch")

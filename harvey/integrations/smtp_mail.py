@@ -99,6 +99,9 @@ class SmtpImapProvider(MailProvider):
             return []
 
     def _fetch_unseen(self, limit: int) -> list[InboundMessage]:
+        from harvey import br  # fork LUME: a caixa é a de verdade do dono
+        if br.ATIVO:
+            return self._buscar_respostas(limit)
         out: list[InboundMessage] = []
         conn = imaplib.IMAP4_SSL(self.imap_host, self.imap_port)
         try:
@@ -113,6 +116,54 @@ class SmtpImapProvider(MailProvider):
                 if status != "OK" or not parts or not isinstance(parts[0], tuple):
                     continue
                 parsed = self._parse_rfc822(parts[0][1])
+                if parsed:
+                    out.append(parsed)
+        finally:
+            try:
+                conn.logout()
+            except Exception:
+                pass
+        return out
+
+    def _buscar_respostas(self, limit: int, dias: int = 21) -> list[InboundMessage]:
+        """Fork LUME: a caixa é a do dono (contato@), usada para tudo. Abre só para leitura (nada vira lido), procura
+        nos últimos `dias` (lido ou não: se ele leu a resposta antes, o Harvey ainda vê e não manda o follow-up) e só
+        baixa o que é resposta a um e-mail do Harvey, aviso de devolução ou mensagem de quem ele prospectou."""
+        from datetime import datetime, timedelta
+
+        dominio = (self.config.persona.email or self.smtp_user).split("@")[-1].lower()
+        conhecidos = {e.lower() for e in getattr(self, "remetentes_conhecidos", set()) if e}
+        escolhidos: list[bytes] = []
+        out: list[InboundMessage] = []
+        conn = imaplib.IMAP4_SSL(self.imap_host, self.imap_port)
+        try:
+            conn.login(self.imap_user, self.imap_pass)
+            conn.select("INBOX", readonly=True)
+            desde = (datetime.now() - timedelta(days=dias)).strftime("%d-%b-%Y")
+            status, data = conn.search(None, "SINCE", desde)
+            if status != "OK":
+                return []
+            ids = data[0].split()[-600:]
+            for i in range(0, len(ids), 100):
+                status, partes = conn.fetch(
+                    b",".join(ids[i:i + 100]),
+                    "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT IN-REPLY-TO REFERENCES)])",
+                )
+                if status != "OK":
+                    continue
+                for parte in partes or []:
+                    if not isinstance(parte, tuple):
+                        continue
+                    cab = email.message_from_bytes(parte[1])
+                    de = parseaddr(str(cab.get("From", "")))[1].lower()
+                    refs = f"{cab.get('In-Reply-To', '')} {cab.get('References', '')}".lower()
+                    if f"@{dominio}>" in refs or de in conhecidos or looks_like_bounce(de, str(cab.get("Subject", ""))):
+                        escolhidos.append(parte[0].split()[0])
+            for seq in escolhidos[-limit:]:
+                status, partes = conn.fetch(seq, "(BODY.PEEK[])")
+                if status != "OK" or not partes or not isinstance(partes[0], tuple):
+                    continue
+                parsed = self._parse_rfc822(partes[0][1])
                 if parsed:
                     out.append(parsed)
         finally:
