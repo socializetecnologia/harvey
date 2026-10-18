@@ -301,7 +301,7 @@ async def heartbeat(stop_event: asyncio.Event | None = None):
             from harvey import br  # fork LUME: o e-mail que a empresa publica no site vira contato
             if br.ATIVO:
                 from harvey.collectors.br_contatos import coletar as coletar_contatos
-                tasks.append(("br_contatos", coletar_contatos(state, limite=15)))
+                tasks.append(("br_contatos", coletar_contatos(state, limite=30)))
 
             outcomes = await _run_agents(tasks)
 
