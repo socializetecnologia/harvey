@@ -237,6 +237,8 @@ class Brain:
         ``agent``/``task`` label the call in the usage_events ledger so the
         dashboard can attribute tokens and cost to specific work.
         """
+        from harvey import br  # fork LUME: pt-BR e LGPD em toda chamada (HARVEY_IDIOMA=pt-BR)
+        prompt = br.com_idioma(prompt)
         if self.provider == "codex":
             return await self._think_codex(
                 prompt, session_id=session_id, timeout=timeout,

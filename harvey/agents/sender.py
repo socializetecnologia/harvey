@@ -346,6 +346,10 @@ class Sender:
         for key, value in replacements.items():
             text = text.replace("{{" + key + "}}", value or "")
             text = text.replace("{{ " + key + " }}", value or "")
+        from harvey import br  # fork LUME
+        if br.ATIVO:
+            import re
+            text = re.sub(r"(?im)^(oi|olá|ola|opa|e aí|bom dia|boa tarde|boa noite)\s+,", r"\1,", text)
         return text.strip()
 
     async def _stage_campaign_native(self, campaign):

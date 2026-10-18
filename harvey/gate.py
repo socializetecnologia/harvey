@@ -26,6 +26,11 @@ BANNED_PHRASES = (
     "as a language model",
 )
 
+from harvey import br  # noqa: E402  (fork LUME)
+
+if br.ATIVO:
+    BANNED_PHRASES = BANNED_PHRASES + br.FRASES_PROIBIDAS
+
 MAX_SUBJECT_LEN = 90
 MAX_BODY_WORDS = 220        # hard ceiling; sequences aim far lower
 MAX_LINKS = 1

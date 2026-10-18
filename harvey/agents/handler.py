@@ -77,6 +77,12 @@ ESCALATION_PATTERNS = (
     "blacklist",
 )
 
+from harvey import br  # noqa: E402  (fork LUME)
+
+if br.ATIVO:
+    OPT_OUT_PATTERNS = OPT_OUT_PATTERNS + br.OPT_OUT
+    ESCALATION_PATTERNS = ESCALATION_PATTERNS + br.ESCALAR
+
 
 class Handler:
     def __init__(

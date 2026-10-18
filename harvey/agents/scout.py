@@ -207,7 +207,7 @@ class Scout:
         headers = {
             "User-Agent": random.choice(USER_AGENTS),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.5",  # fork LUME
         }
         if extra:
             headers.update(extra)
@@ -1318,6 +1318,9 @@ Respond ONLY with the JSON array."""
         """Try to find and scrape a company's team/about page."""
         team_paths = ["/team", "/about", "/about-us", "/our-team", "/people",
                       "/leadership", "/about/team", "/company/team", "/staff"]
+        from harvey import br  # fork LUME
+        if br.ATIVO:
+            team_paths = br.PAGINAS_EQUIPE + team_paths
         members = []
 
         base, _ = await self._resolve_base_url(domain)
@@ -1365,7 +1368,7 @@ Respond ONLY with the JSON array."""
                     continue
                 if any(ch.isdigit() for ch in name):
                     continue
-                if not re.match(r"^[A-Za-z][A-Za-z.'\- ]+$", name):
+                if not re.match(r"^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ.'\- ]+$", name):
                     continue
 
                 parts = name.split(" ", 1)

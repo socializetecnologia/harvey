@@ -508,6 +508,9 @@ class OpenStreetMap(DiscoveryProvider):
         database with plausible-looking junk is far worse than returning
         nothing.
         """
+        from harvey import br  # fork LUME: "dentista", "barbearia", "advocacia"...
+        if br.ATIVO and br.tags_osm(term):
+            return br.tags_osm(term)
         low = term.lower()
         for needle, tags in self.TAG_MAP.items():
             if needle in low:

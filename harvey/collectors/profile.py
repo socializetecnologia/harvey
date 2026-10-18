@@ -106,6 +106,12 @@ CAREERS_PATHS = ("/careers", "/jobs", "/join-us", "/employment", "/hiring",
 CONTACT_PATHS = ("/contact", "/contact-us", "/get-a-quote", "/free-estimate",
                  "/request-estimate", "/quote")
 
+from harvey import br  # noqa: E402  (fork LUME)
+
+if br.ATIVO:
+    TEAM_PATHS = tuple(br.PAGINAS_EQUIPE) + TEAM_PATHS
+    CONTACT_PATHS = tuple(br.PAGINAS_CONTATO) + CONTACT_PATHS
+
 # Words that are never part of a person's name. Without this, headings like
 # "Request Service", "Baker History" and "Commercial Services" pass a
 # Firstname-Lastname regex and become contacts — the single most common

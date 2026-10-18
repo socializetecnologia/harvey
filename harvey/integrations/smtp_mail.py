@@ -68,6 +68,10 @@ class SmtpImapProvider(MailProvider):
         if in_reply_to:
             msg["In-Reply-To"] = in_reply_to
             msg["References"] = in_reply_to
+        from harvey import br  # fork LUME: LGPD — quem envia e como sair, em todo e-mail
+        if br.ATIVO:
+            body = body.rstrip() + br.rodape()
+            msg["List-Unsubscribe"] = f"<mailto:{persona.email or self.smtp_user}?subject=SAIR>"
         msg.set_content(body)
 
         try:

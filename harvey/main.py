@@ -298,6 +298,11 @@ async def heartbeat(stop_event: asyncio.Event | None = None):
             if summary.get("unprofiled", 0):
                 tasks.append(("profile", run_profile_stage(state, limit=25)))
 
+            from harvey import br  # fork LUME: o e-mail que a empresa publica no site vira contato
+            if br.ATIVO:
+                from harvey.collectors.br_contatos import coletar as coletar_contatos
+                tasks.append(("br_contatos", coletar_contatos(state, limite=15)))
+
             outcomes = await _run_agents(tasks)
 
             # Phase 2: send — only after every reply-reading task this cycle
@@ -309,6 +314,13 @@ async def heartbeat(stop_event: asyncio.Event | None = None):
                 unread = [n for n, _ in tasks
                           if n in REPLY_READERS and outcomes.get(n) is not True]
                 paused = brain.paused_reason
+                import os as _os
+                if not paused and br.ATIVO and _os.getenv("HARVEY_SO_DIA_UTIL", "1") != "0":
+                    import pytz
+                    from datetime import datetime as _dt
+                    _agora = _dt.now(pytz.timezone(config.usage.quiet_hours.timezone))
+                    if _agora.weekday() >= 5:  # fork LUME: e-mail frio só de segunda a sexta
+                        paused = "fim de semana: e-mail só de segunda a sexta."
                 if paused or unread:
                     reason = paused or "replies couldn't all be read and handled."
                     logger.error(
