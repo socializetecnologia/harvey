@@ -97,10 +97,83 @@ def test_coletor_cria_o_contato_publicado(monkeypatch):
     monkeypatch.setattr(br_contatos.httpx, "AsyncClient", Cliente)
     dormir = asyncio.sleep
     monkeypatch.setattr(br_contatos.asyncio, "sleep", lambda s: dormir(0))
+
+    async def nada(state, limite=30):
+        return 0
+
+    async def verificado(e):
+        return "verified"
+
+    monkeypatch.setattr(br_contatos, "reverificar", nada)
+    monkeypatch.setattr(br_contatos, "situacao", verificado)
     assert asyncio.run(br_contatos.coletar(Estado())) == 1
     assert criados[0].email == "contato@clinicasorriso.com.br" and criados[0].email_status == "verified"
+    assert criados[0].source == "site_verificado"
     assert {"type": "instagram", "detail": "@clinicasorriso"} in sinais
     assert vistos == ["c1"]
+
+
+def test_situacao_confere_mx_e_smtp_antes_de_enviar(monkeypatch):
+    """O e-mail publicado no site só vira enviável se o domínio recebe e-mail e o servidor não recusa a caixa."""
+    from harvey.collectors import br_contatos
+    from harvey.integrations import email_finder
+
+    mx = {"morto.com.br": None, "gmail.com": "gmail-smtp-in.l.google.com", "hostinger.com.br": "mx1.hostinger.com.br"}
+    smtp = {"sumiu@hostinger.com.br": ("invalid", False), "ok@hostinger.com.br": ("verified", False)}
+
+    async def get_mx_host(d):
+        return mx[d]
+
+    async def verify(e, tipo, env):
+        return smtp.get(e, (None, False))
+
+    monkeypatch.setattr(email_finder, "get_mx_host", get_mx_host)
+    monkeypatch.setattr(email_finder, "_verify_candidate", verify)
+    s = lambda e: asyncio.run(br_contatos.situacao(e))
+    assert s("contato@morto.com.br") == "invalid"  # domínio sem servidor de e-mail
+    assert s("sumiu@hostinger.com.br") == "invalid"  # o servidor recusou a caixa
+    assert s("ok@hostinger.com.br") == "verified"
+    assert s("talvez@hostinger.com.br") == "risky"  # sem resposta num servidor pequeno: não sai
+    assert s("dono@gmail.com") == "verified"  # provedor grande não responde ao teste; publicado vale
+
+
+def test_reverificar_tira_da_fila_o_contato_antigo_que_nao_existe(monkeypatch, tmp_path):
+    import sqlite3
+
+    from harvey.collectors import br_contatos
+
+    banco = tmp_path / "h.db"
+    db = sqlite3.connect(banco)
+    db.executescript("""
+      CREATE TABLE prospects (id TEXT, email TEXT, source TEXT);
+      CREATE TABLE outbox (prospect_id TEXT, status TEXT);
+      INSERT INTO prospects VALUES ('p1', 'velho@x.com.br', 'site_publicado'), ('p2', 'bom@x.com.br', 'site_publicado'),
+        ('p3', 'ja@x.com.br', 'site_publicado'), ('p4', 'outro@x.com.br', 'apollo');
+      INSERT INTO outbox VALUES ('p3', 'sent');
+    """)
+    db.commit()
+    db.close()
+    status, cancelados = {}, []
+
+    class Estado:
+        db_path = str(banco)
+
+        async def update_prospect_email(self, pid, email, st):
+            status[pid] = st
+
+        async def cancel_pending_outbox_for_prospect(self, pid, reason=""):
+            cancelados.append(pid)
+
+    async def situacao(e):
+        return "invalid" if e.startswith("velho") else "verified"
+
+    monkeypatch.setattr(br_contatos, "situacao", situacao)
+    assert asyncio.run(br_contatos.reverificar(Estado())) == 1
+    assert status == {"p1": "invalid", "p2": "verified"}  # quem já recebeu e quem não veio do site ficam de fora
+    assert cancelados == ["p1"]
+    fontes = dict(sqlite3.connect(banco).execute("SELECT id, source FROM prospects").fetchall())
+    assert fontes == {"p1": "site_verificado", "p2": "site_verificado", "p3": "site_publicado", "p4": "apollo"}
+    assert asyncio.run(br_contatos.reverificar(Estado())) == 0  # não repete
 
 
 def test_leitura_da_caixa_nao_marca_nada_e_so_traz_as_respostas(monkeypatch):

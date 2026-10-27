@@ -323,7 +323,8 @@ async def heartbeat(stop_event: asyncio.Event | None = None):
                         paused = "fim de semana: e-mail só de segunda a sexta."
                 if paused or unread:
                     reason = paused or "replies couldn't all be read and handled."
-                    logger.error(
+                    # fork LUME: o fim de semana é regra, não erro (no app aparecia como falha a cada 30 min)
+                    (logger.info if paused and paused.startswith("fim de semana") else logger.error)(
                         f"Not sending this cycle: {reason} Queued emails wait "
                         "until replies can be read again."
                     )
